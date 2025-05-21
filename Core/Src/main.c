@@ -322,11 +322,12 @@ int main(void) {
       //   phase_err += 2 * PI;
       // }
 
-      uint8_t phase_err_buf[50] = {0};
-      sprintf((char *)phase_err_buf, "phase_err: %d\n",
-              (uint16_t)(phase_err * 1000));
-      HAL_UART_Transmit(&hlpuart1, phase_err_buf, strlen((char *)phase_err_buf),
-                        50);
+      // uint8_t phase_err_buf[50] = {0};
+      // sprintf((char *)phase_err_buf, "phase_err: %d\n",
+      //         (uint16_t)(phase_err * 1000));
+      // HAL_UART_Transmit(&hlpuart1, phase_err_buf, strlen((char
+      // *)phase_err_buf),
+      //                   50);
       // 立即应用相位调整
       SET_DAC_TIM_PHASE(&htim6, TABLE_LENGTH, phase_err);
       cal_phase_err_finished = 1;

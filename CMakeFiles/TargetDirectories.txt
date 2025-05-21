@@ -1,9 +1,0 @@
-/home/fermata/Development/STM32/2023h_g474re/CMakeFiles/2023h_g474re.dir
-/home/fermata/Development/STM32/2023h_g474re/CMakeFiles/edit_cache.dir
-/home/fermata/Development/STM32/2023h_g474re/CMakeFiles/rebuild_cache.dir
-/home/fermata/Development/STM32/2023h_g474re/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir
-/home/fermata/Development/STM32/2023h_g474re/cmake/stm32cubemx/CMakeFiles/edit_cache.dir
-/home/fermata/Development/STM32/2023h_g474re/cmake/stm32cubemx/CMakeFiles/rebuild_cache.dir
-/home/fermata/Development/STM32/2023h_g474re/Drivers/CMSIS_DSP/Source/CMakeFiles/CMSISDSP.dir
-/home/fermata/Development/STM32/2023h_g474re/Drivers/CMSIS_DSP/Source/CMakeFiles/edit_cache.dir
-/home/fermata/Development/STM32/2023h_g474re/Drivers/CMSIS_DSP/Source/CMakeFiles/rebuild_cache.dir
