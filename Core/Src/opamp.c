@@ -39,7 +39,7 @@ void MX_OPAMP4_Init(void)
 
   /* USER CODE END OPAMP4_Init 1 */
   hopamp4.Instance = OPAMP4;
-  hopamp4.Init.PowerMode = OPAMP_POWERMODE_HIGHSPEED;
+  hopamp4.Init.PowerMode = OPAMP_POWERMODE_NORMALSPEED;
   hopamp4.Init.Mode = OPAMP_FOLLOWER_MODE;
   hopamp4.Init.NonInvertingInput = OPAMP_NONINVERTINGINPUT_DAC;
   hopamp4.Init.InternalOutput = DISABLE;

@@ -78,7 +78,7 @@ uint16_t *generate_cosine_wave_table(uint32_t table_size, uint8_t periods,
 // #define SAMPLE_LENGTH 1024
 #define FFT_LENGTH 1024
 #define SAMPLE_RATES 1000000
-#define TABLE_LENGTH 100
+#define TABLE_LENGTH 1000
 
 // q15_t cmplx_ang_out[FFT_LENGTH * 2] = {0};
 uint8_t adc_conv_finished = 0;
@@ -96,7 +96,6 @@ uint16_t *costable = NULL;
 uint8_t comp_flag = 0;
 /* USER CODE END 0 */
 
-uint16_t adc_value[FFT_LENGTH] = {0};
 /**
  * @brief  The application entry point.
  * @retval int
@@ -104,7 +103,7 @@ uint16_t adc_value[FFT_LENGTH] = {0};
 int main(void) {
 
   /* USER CODE BEGIN 1 */
-
+  uint16_t adc_value[FFT_LENGTH] = {0};
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -136,11 +135,14 @@ int main(void) {
   MX_TIM7_Init();
   MX_LPUART1_UART_Init();
   MX_TIM3_Init();
+  MX_DAC2_Init();
+  MX_TIM8_Init();
   /* USER CODE BEGIN 2 */
   uint8_t str[] = "\r\n-------------USART_Sending------------------\r\n";
   HAL_UART_Transmit(&hlpuart1, str, sizeof(str) / sizeof(str[0]), 40);
   HAL_OPAMP_Start(&hopamp4);
   HAL_OPAMP_Start(&hopamp5);
+  HAL_DAC_Start(&hdac2, DAC_CHANNEL_1);
   /* USER CODE END 2 */
 
   /* Initialize led */
@@ -237,11 +239,11 @@ int main(void) {
       HAL_UART_Transmit(&hlpuart1, cmp_str_buf, strlen((char *)cmp_str_buf),
                         40);
 
-      sintable = generate_sine_wave_table(TABLE_LENGTH, 1, 1024);
-      costable = generate_cosine_wave_table(TABLE_LENGTH, 1, 1024);
+      sintable = generate_sine_wave_table(TABLE_LENGTH, 10, 1024);
+      costable = generate_cosine_wave_table(TABLE_LENGTH, 10, 1024);
 
-      SET_DAC_TIM_FREQ(&htim6, TABLE_LENGTH, max_freq);
-      SET_DAC_TIM_FREQ(&htim7, TABLE_LENGTH, sec_freq);
+      SET_DAC_TIM_FREQ(&htim6, TABLE_LENGTH / 10, max_freq);
+      SET_DAC_TIM_FREQ(&htim7, TABLE_LENGTH / 10, sec_freq);
       HAL_TIM_Base_Start(&htim6);
       HAL_TIM_Base_Start(&htim7);
 
@@ -274,7 +276,7 @@ int main(void) {
       while (!adc_conv_finished) // 等待 adc 采样完成
         ;
 
-      // for (uint8_t i = 0; i < 100; i++) {
+      // for (uint16_t i = 0; i < 1000; i++) {
       //   uint8_t adc_val_buf[30] = {0};
       //   int16_t adc_val = ((adc_value[i] >> 4) - (int16_t)adc_dc_offset);
       //   sprintf((char *)adc_val_buf, "adc_val: %d\n", adc_val);
@@ -282,19 +284,27 @@ int main(void) {
       //   *)adc_val_buf),
       //                     40);
       // }
-      // for (uint8_t i = 0; i < 100; i++) {
+      // for (uint16_t i = 0; i < 1000; i++) {
       //   uint8_t sin_buf[30] = {0};
       //   int16_t sin_val = (sintable[i] - 512);
       //   sprintf((char *)sin_buf, "sin_val: %d\n", sin_val);
       //   HAL_UART_Transmit(&hlpuart1, sin_buf, strlen((char *)sin_buf), 40);
       // }
 
+      // uint16_t adc_value_test[100] = {0};
+      // for (uint32_t i = 0; i < 100; i++) {
+      //   float value = 1024 * (sin(2 * PI * i / 100 + PI / 4) + 1.0f) / 2.0f;
+      //   // 将值映射到 [100, amplitude]
+      //   adc_value_test[i] = (uint16_t)value;
+      // }
+
       // 计算与参考波形的相关性
       float sum_sin = 0;
       float sum_cos = 0;
-      for (uint8_t i = 0; i < 100; i++) {
+      for (uint16_t i = 0; i < 1000; i++) {
         // 转换为有符号值并计算相关性
         int16_t adc_val = ((adc_value[i] >> 4) - (int16_t)adc_dc_offset);
+        // int16_t adc_val = ((adc_value_test[i] >> 4) - 512);
         int16_t sin_val = (sintable[i] - 512);
         int16_t cos_val = (costable[i] - 512);
 
@@ -312,6 +322,7 @@ int main(void) {
       // } else {
       //   ADD_DAC_TIM(&htim6);
       // }
+      phase_err = phase_err - PI / 2;
       if (phase_err < 0) {
         phase_err = -phase_err;
       } else {
@@ -328,8 +339,11 @@ int main(void) {
       // HAL_UART_Transmit(&hlpuart1, phase_err_buf, strlen((char
       // *)phase_err_buf),
       //                   50);
+
+      HAL_DAC_SetValue(&hdac2, DAC_CHANNEL_1, DAC_ALIGN_12B_R, phase_err * 100);
       // 立即应用相位调整
       SET_DAC_TIM_PHASE(&htim6, TABLE_LENGTH, phase_err);
+      // HAL_Delay(100);
       cal_phase_err_finished = 1;
     }
     // HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc_value, SAMPLE_TIMES);
@@ -398,8 +412,10 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
 
 void HAL_DAC_ConvCpltCallbackCh1(DAC_HandleTypeDef *hdac) {
   if (hdac == &hdac4) {
-    cal_phase_err_finished = 0;
     start_adc = 1;
+    if (cal_phase_err_finished) {
+      cal_phase_err_finished = 0;
+    }
   }
 }
 
@@ -422,6 +438,8 @@ void SET_DAC_TIM_PHASE(TIM_HandleTypeDef *htim, uint16_t wavelen,
   uint16_t phase_cnt = wavelen * phase * period / (2 * PI);
   uint32_t cnt = __HAL_TIM_GET_COUNTER(htim) + 65535 - phase_cnt;
   __HAL_TIM_SetCounter(htim, cnt);
+  // __HAL_TIM_SetCounter(htim, __HAL_TIM_GetCounter(htim) + 65535 -
+  //                                16000 * phase / 2 / PI);
 }
 
 uint16_t *generate_sine_wave_table(uint32_t table_size, uint8_t periods,
@@ -473,7 +491,8 @@ uint16_t *generate_cosine_wave_table(uint32_t table_size, uint8_t periods,
  */
 void Error_Handler(void) {
   /* USER CODE BEGIN Error_Handler_Debug */
-  /* User can add his own implementation to report the HAL error return state */
+  /* User can add his own implementation to report the HAL error return state
+   */
   __disable_irq();
   while (1) {
   }
@@ -491,8 +510,8 @@ void Error_Handler(void) {
 void assert_failed(uint8_t *file, uint32_t line) {
   /* USER CODE BEGIN 6 */
   /* User can add his own implementation to report the file name and line
-     number, ex: printf("Wrong parameters value: file %s on line %d\r\n", file,
-     line) */
+     number, ex: printf("Wrong parameters value: file %s on line %d\r\n",
+     file, line) */
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
