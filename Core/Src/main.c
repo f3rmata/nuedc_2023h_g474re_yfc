@@ -19,6 +19,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "adc.h"
+#include "comp.h"
 #include "cordic.h"
 #include "dac.h"
 #include "dma.h"
@@ -137,6 +138,7 @@ int main(void) {
   MX_TIM3_Init();
   MX_DAC2_Init();
   MX_TIM8_Init();
+  MX_COMP1_Init();
   /* USER CODE BEGIN 2 */
   uint8_t str[] = "\r\n-------------USART_Sending------------------\r\n";
   HAL_UART_Transmit(&hlpuart1, str, sizeof(str) / sizeof(str[0]), 40);
@@ -147,10 +149,6 @@ int main(void) {
 
   /* Initialize led */
   BSP_LED_Init(LED_GREEN);
-
-  /* Initialize USER push-button, will be used to trigger an interrupt each time
-   * it's pressed.*/
-  BSP_PB_Init(BUTTON_USER, BUTTON_MODE_EXTI);
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
@@ -192,7 +190,7 @@ int main(void) {
       float32_t h_window[FFT_LENGTH] = {0};
       q15_t h_window_q15[FFT_LENGTH] = {0};
       // hamming_window(h_window);
-      arm_hamming_f32(h_window, FFT_LENGTH);
+      arm_hanning_f32(h_window, FFT_LENGTH);
       arm_float_to_q15(h_window, h_window_q15, FFT_LENGTH);
       arm_mult_q15(fft_in, h_window_q15, fft_in, FFT_LENGTH);
       arm_rfft_q15(&forwardS, fft_in, fft_out);
@@ -266,6 +264,7 @@ int main(void) {
       fft_finished = 1;
     }
     if (fft_finished && !cal_phase_err_finished) {
+      // HAL_COMP_Start(&hcomp1);
       start_adc = 0;
       while (!start_adc) // 等待 dac dma 完成一次传输到达零点
         ;
@@ -313,6 +312,7 @@ int main(void) {
       }
 
       float32_t phase_err = 0;
+      float32_t delay_phase = 0;
       // 计算相位误差
       arm_atan2_f32(sum_sin, sum_cos, &phase_err);
       // phase_err = atan2(sum_sin, sum_cos);
@@ -324,9 +324,9 @@ int main(void) {
       // }
       phase_err = phase_err - PI / 2;
       if (phase_err < 0) {
-        phase_err = -phase_err;
+        delay_phase = -phase_err;
       } else {
-        phase_err = 2 * PI - phase_err;
+        delay_phase = 2 * PI - phase_err;
       }
 
       // if (phase_err < 0) {
@@ -340,10 +340,9 @@ int main(void) {
       // *)phase_err_buf),
       //                   50);
 
-      HAL_DAC_SetValue(&hdac2, DAC_CHANNEL_1, DAC_ALIGN_12B_R, phase_err * 100);
       // 立即应用相位调整
-      SET_DAC_TIM_PHASE(&htim6, TABLE_LENGTH, phase_err);
-      // HAL_Delay(100);
+      SET_DAC_TIM_PHASE(&htim6, TABLE_LENGTH / 10, delay_phase);
+      HAL_Delay(1);
       cal_phase_err_finished = 1;
     }
     // HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc_value, SAMPLE_TIMES);
@@ -404,6 +403,15 @@ void SystemClock_Config(void) {
 }
 
 /* USER CODE BEGIN 4 */
+// void HAL_COMP_TriggerCallback(COMP_HandleTypeDef *hcomp) {
+//   if (hcomp = &hcomp1) {
+//     HAL_DAC_Stop_DMA(&hdac4, DAC_CHANNEL_1);
+//     HAL_DAC_Start_DMA(&hdac4, DAC_CHANNEL_1, (uint32_t *)sintable,
+//     TABLE_LENGTH,
+//                       DAC_ALIGN_12B_R);
+//   }
+// }
+
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
   if (hadc == &hadc1) {
     adc_conv_finished = 1;
@@ -437,6 +445,7 @@ void SET_DAC_TIM_PHASE(TIM_HandleTypeDef *htim, uint16_t wavelen,
   uint16_t period = __HAL_TIM_GET_AUTORELOAD(htim) + 1;
   uint16_t phase_cnt = wavelen * phase * period / (2 * PI);
   uint32_t cnt = __HAL_TIM_GET_COUNTER(htim) + 65535 - phase_cnt;
+  HAL_DAC_SetValue(&hdac2, DAC_CHANNEL_1, DAC_ALIGN_12B_R, phase_cnt / 10);
   __HAL_TIM_SetCounter(htim, cnt);
   // __HAL_TIM_SetCounter(htim, __HAL_TIM_GetCounter(htim) + 65535 -
   //                                16000 * phase / 2 / PI);
