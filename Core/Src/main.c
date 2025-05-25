@@ -28,6 +28,7 @@
 #include "tim.h"
 #include "usart.h"
 
+
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "arm_math.h"
@@ -341,8 +342,8 @@ int main(void) {
       //                   50);
 
       // 立即应用相位调整
-      SET_DAC_TIM_PHASE(&htim6, TABLE_LENGTH / 10, delay_phase);
-      HAL_Delay(1);
+      // SET_DAC_TIM_PHASE(&htim6, TABLE_LENGTH / 10, delay_phase);
+      // HAL_Delay(1);
       cal_phase_err_finished = 1;
     }
     // HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc_value, SAMPLE_TIMES);
