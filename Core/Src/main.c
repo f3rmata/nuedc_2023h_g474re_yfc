@@ -28,7 +28,6 @@
 #include "tim.h"
 #include "usart.h"
 
-
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "arm_math.h"
@@ -80,7 +79,7 @@ uint16_t *generate_cosine_wave_table(uint32_t table_size, uint8_t periods,
 // #define SAMPLE_LENGTH 1024
 #define FFT_LENGTH 1024
 #define SAMPLE_RATES 1000000
-#define TABLE_LENGTH 1000
+#define TABLE_LENGTH 50
 
 // q15_t cmplx_ang_out[FFT_LENGTH * 2] = {0};
 uint8_t adc_conv_finished = 0;
@@ -146,6 +145,8 @@ int main(void) {
   HAL_OPAMP_Start(&hopamp4);
   HAL_OPAMP_Start(&hopamp5);
   HAL_DAC_Start(&hdac2, DAC_CHANNEL_1);
+
+  // HAL_DMAEx_EnableMuxRequestGenerator(&hdma);
   /* USER CODE END 2 */
 
   /* Initialize led */
@@ -238,11 +239,17 @@ int main(void) {
       HAL_UART_Transmit(&hlpuart1, cmp_str_buf, strlen((char *)cmp_str_buf),
                         40);
 
-      sintable = generate_sine_wave_table(TABLE_LENGTH, 10, 1024);
-      costable = generate_cosine_wave_table(TABLE_LENGTH, 10, 1024);
+      sintable = generate_sine_wave_table(TABLE_LENGTH, 1, 1024);
+      // costable = generate_cosine_wave_table(TABLE_LENGTH, 1, 1024);
 
-      SET_DAC_TIM_FREQ(&htim6, TABLE_LENGTH / 10, max_freq);
-      SET_DAC_TIM_FREQ(&htim7, TABLE_LENGTH / 10, sec_freq);
+      uint32_t trg_freq = TABLE_LENGTH * max_freq;
+      uint8_t Trigger_UART_buf[50] = {0};
+      sprintf((char *)Trigger_UART_buf, "Trigger freq: %d\n", (int)trg_freq);
+      HAL_UART_Transmit(&hlpuart1, Trigger_UART_buf,
+                        strlen((char *)Trigger_UART_buf), 40);
+
+      SET_DAC_TIM_FREQ(&htim6, TABLE_LENGTH, sec_freq + 100);
+      SET_DAC_TIM_FREQ(&htim7, TABLE_LENGTH, max_freq + 100);
       HAL_TIM_Base_Start(&htim6);
       HAL_TIM_Base_Start(&htim7);
 
@@ -261,91 +268,112 @@ int main(void) {
       HAL_GPIO_WritePin(LED2_GPIO_PORT, LED2_PIN, GPIO_PIN_RESET);
       HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc_value, FFT_LENGTH);
 
+      q15_t adc_val_cmp_q15[FFT_LENGTH] = {0};
+      for (size_t i = 0; i < FFT_LENGTH; ++i) {
+        adc_val_cmp_q15[i] = (int16_t)((int32_t)adc_value[i] - 32768);
+      }
+      q15_t adc_val_min_q15 = 0;
+      float32_t adc_val_max_float = 0;
+      arm_min_no_idx_q15(adc_val_cmp_q15, 1000, &adc_val_min_q15);
+      arm_q15_to_float(&adc_val_min_q15, &adc_val_max_float, 1);
+
+      uint8_t adc_val_max_cmp_buf[40] = {0};
+      sprintf((char *)adc_val_max_cmp_buf, "cmp_val: %d",
+              (int)adc_val_max_float * 1000);
+      HAL_UART_Transmit(&hlpuart1, adc_val_max_cmp_buf,
+                        strlen((char *)adc_val_max_cmp_buf), HAL_MAX_DELAY);
+      HAL_DAC_SetValue(&hdac2, DAC_CHANNEL_1, DAC_ALIGN_12B_L,
+                       adc_val_min_q15 + 34768);
+
       adc_conv_finished = 0;
       fft_finished = 1;
     }
-    if (fft_finished && !cal_phase_err_finished) {
-      // HAL_COMP_Start(&hcomp1);
-      start_adc = 0;
-      while (!start_adc) // 等待 dac dma 完成一次传输到达零点
-        ;
+    /*if (fft_finished && !cal_phase_err_finished) {
+          // HAL_COMP_Start(&hcomp1);
+          start_adc = 0;
+          while (!start_adc) // 等待 dac dma 完成一次传输到达零点
+            ;
 
-      // SET_ADC_TIM_FREQ(&htim3, 100, max_freq * 1000);
-      HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc_value, TABLE_LENGTH);
-      adc_conv_finished = 0;
-      while (!adc_conv_finished) // 等待 adc 采样完成
-        ;
+          // SET_ADC_TIM_FREQ(&htim3, 100, max_freq * 1000);
+          HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc_value, TABLE_LENGTH);
+          adc_conv_finished = 0;
+          while (!adc_conv_finished) // 等待 adc 采样完成
+            ;
 
-      // for (uint16_t i = 0; i < 1000; i++) {
-      //   uint8_t adc_val_buf[30] = {0};
-      //   int16_t adc_val = ((adc_value[i] >> 4) - (int16_t)adc_dc_offset);
-      //   sprintf((char *)adc_val_buf, "adc_val: %d\n", adc_val);
-      //   HAL_UART_Transmit(&hlpuart1, adc_val_buf, strlen((char
-      //   *)adc_val_buf),
-      //                     40);
-      // }
-      // for (uint16_t i = 0; i < 1000; i++) {
-      //   uint8_t sin_buf[30] = {0};
-      //   int16_t sin_val = (sintable[i] - 512);
-      //   sprintf((char *)sin_buf, "sin_val: %d\n", sin_val);
-      //   HAL_UART_Transmit(&hlpuart1, sin_buf, strlen((char *)sin_buf), 40);
-      // }
+          // for (uint16_t i = 0; i < 1000; i++) {
+          //   uint8_t adc_val_buf[30] = {0};
+          //   int16_t adc_val = ((adc_value[i] >> 4) - (int16_t)adc_dc_offset);
+          //   sprintf((char *)adc_val_buf, "adc_val: %d\n", adc_val);
+          //   HAL_UART_Transmit(&hlpuart1, adc_val_buf, strlen((char
+          //   *)adc_val_buf),
+          //                     40);
+          // }
+          // for (uint16_t i = 0; i < 1000; i++) {
+          //   uint8_t sin_buf[30] = {0};
+          //   int16_t sin_val = (sintable[i] - 512);
+          //   sprintf((char *)sin_buf, "sin_val: %d\n", sin_val);
+          //   HAL_UART_Transmit(&hlpuart1, sin_buf, strlen((char *)sin_buf),
+       40);
+          // }
 
-      // uint16_t adc_value_test[100] = {0};
-      // for (uint32_t i = 0; i < 100; i++) {
-      //   float value = 1024 * (sin(2 * PI * i / 100 + PI / 4) + 1.0f) / 2.0f;
-      //   // 将值映射到 [100, amplitude]
-      //   adc_value_test[i] = (uint16_t)value;
-      // }
+          // uint16_t adc_value_test[100] = {0};
+          // for (uint32_t i = 0; i < 100; i++) {
+          //   float value = 1024 * (sin(2 * PI * i / 100 + PI / 4) + 1.0f)
+       / 2.0f;
+          //   // 将值映射到 [100, amplitude]
+          //   adc_value_test[i] = (uint16_t)value;
+          // }
+          ;
 
-      // 计算与参考波形的相关性
-      float sum_sin = 0;
-      float sum_cos = 0;
-      for (uint16_t i = 0; i < 1000; i++) {
-        // 转换为有符号值并计算相关性
-        int16_t adc_val = ((adc_value[i] >> 4) - (int16_t)adc_dc_offset);
-        // int16_t adc_val = ((adc_value_test[i] >> 4) - 512);
-        int16_t sin_val = (sintable[i] - 512);
-        int16_t cos_val = (costable[i] - 512);
+          /**
+          // 计算与参考波形的相关性
+          float sum_sin = 0;
+          float sum_cos = 0;
+          for (uint16_t i = 0; i < 1000; i++) {
+            // 转换为有符号值并计算相关性
+            int16_t adc_val = ((adc_value[i] >> 4) - (int16_t)adc_dc_offset);
+            // int16_t adc_val = ((adc_value_test[i] >> 4) - 512);
+            int16_t sin_val = (sintable[i] - 512);
+            int16_t cos_val = (costable[i] - 512);
 
-        sum_sin += adc_val * sin_val;
-        sum_cos += adc_val * cos_val;
-      }
+            sum_sin += adc_val * sin_val;
+            sum_cos += adc_val * cos_val;
+          }
 
-      float32_t phase_err = 0;
-      float32_t delay_phase = 0;
-      // 计算相位误差
-      arm_atan2_f32(sum_sin, sum_cos, &phase_err);
-      // phase_err = atan2(sum_sin, sum_cos);
+          float32_t phase_err = 0;
+          float32_t delay_phase = 0;
+          // 计算相位误差
+          arm_atan2_f32(sum_sin, sum_cos, &phase_err);
+          // phase_err = atan2(sum_sin, sum_cos);
 
-      // if (phase_err > 0) {
-      //   DEC_DAC_TIM(&htim6);
-      // } else {
-      //   ADD_DAC_TIM(&htim6);
-      // }
-      phase_err = phase_err - PI / 2;
-      if (phase_err < 0) {
-        delay_phase = -phase_err;
-      } else {
-        delay_phase = 2 * PI - phase_err;
-      }
+          // if (phase_err > 0) {
+          //   DEC_DAC_TIM(&htim6);
+          // } else {
+          //   ADD_DAC_TIM(&htim6);
+          // }
+          phase_err = phase_err - PI / 2;
+          if (phase_err < 0) {
+            delay_phase = -phase_err;
+          } else {
+            delay_phase = 2 * PI - phase_err;
+          }
 
-      // if (phase_err < 0) {
-      //   phase_err += 2 * PI;
-      // }
+          // if (phase_err < 0) {
+          //   phase_err += 2 * PI;
+          // }
 
-      // uint8_t phase_err_buf[50] = {0};
-      // sprintf((char *)phase_err_buf, "phase_err: %d\n",
-      //         (uint16_t)(phase_err * 1000));
-      // HAL_UART_Transmit(&hlpuart1, phase_err_buf, strlen((char
-      // *)phase_err_buf),
-      //                   50);
+          // uint8_t phase_err_buf[50] = {0};
+          // sprintf((char *)phase_err_buf, "phase_err: %d\n",
+          //         (uint16_t)(phase_err * 1000));
+          // HAL_UART_Transmit(&hlpuart1, phase_err_buf, strlen((char
+          // *)phase_err_buf),
+          //                   50);
 
-      // 立即应用相位调整
-      // SET_DAC_TIM_PHASE(&htim6, TABLE_LENGTH / 10, delay_phase);
-      // HAL_Delay(1);
-      cal_phase_err_finished = 1;
-    }
+          // 立即应用相位调整
+          // SET_DAC_TIM_PHASE(&htim6, TABLE_LENGTH / 10, delay_phase);
+          // HAL_Delay(1);
+          cal_phase_err_finished = 1;
+         }*/
     // HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc_value, SAMPLE_TIMES);
     /* USER CODE END WHILE */
 
@@ -428,6 +456,20 @@ void HAL_DAC_ConvCpltCallbackCh1(DAC_HandleTypeDef *hdac) {
   }
 }
 
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
+  if (GPIO_Pin == GPIO_PIN_3) {
+    if (fft_finished) {
+      // HAL_DAC_Stop_DMA(&hdac4, DAC_CHANNEL_1);
+      // HAL_DAC_Stop_DMA(&hdac4, DAC_CHANNEL_2);
+      HAL_DAC_Start_DMA(&hdac4, DAC_CHANNEL_1, (uint32_t *)sintable,
+                        TABLE_LENGTH - 2, DAC_ALIGN_12B_R);
+      HAL_DAC_Start_DMA(&hdac4, DAC_CHANNEL_2, (uint32_t *)sintable,
+                        TABLE_LENGTH - 2, DAC_ALIGN_12B_R);
+      HAL_GPIO_TogglePin(COMP_OUT_TEST_GPIO_Port, COMP_OUT_TEST_Pin);
+    }
+  }
+}
+
 // void SET_ADC_TIM_FREQ(TIM_HandleTypeDef *htim, uint16_t wavelen,
 //                       uint32_t freq) {
 //   uint16_t psc = __HAL_TIM_GET_CLOCKDIVISION(htim);
@@ -446,7 +488,7 @@ void SET_DAC_TIM_PHASE(TIM_HandleTypeDef *htim, uint16_t wavelen,
   uint16_t period = __HAL_TIM_GET_AUTORELOAD(htim) + 1;
   uint16_t phase_cnt = wavelen * phase * period / (2 * PI);
   uint32_t cnt = __HAL_TIM_GET_COUNTER(htim) + 65535 - phase_cnt;
-  HAL_DAC_SetValue(&hdac2, DAC_CHANNEL_1, DAC_ALIGN_12B_R, phase_cnt / 10);
+  // HAL_DAC_SetValue(&hdac2, DAC_CHANNEL_1, DAC_ALIGN_12B_R, phase_cnt / 10);
   __HAL_TIM_SetCounter(htim, cnt);
   // __HAL_TIM_SetCounter(htim, __HAL_TIM_GetCounter(htim) + 65535 -
   //                                16000 * phase / 2 / PI);

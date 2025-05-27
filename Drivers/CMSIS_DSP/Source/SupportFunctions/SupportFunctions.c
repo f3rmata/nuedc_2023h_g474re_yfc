@@ -58,7 +58,7 @@
 // #include "arm_float_to_q31.c"
 // #include "arm_float_to_q7.c"
 // #include "arm_q15_to_f64.c"
-// #include "arm_q15_to_float.c"
+#include "arm_q15_to_float.c"
 // #include "arm_q15_to_q31.c"
 // #include "arm_q15_to_q7.c"
 // #include "arm_q31_to_f64.c"

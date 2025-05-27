@@ -66,6 +66,11 @@ void Error_Handler(void);
 #define RCC_OSC_IN_GPIO_Port GPIOF
 #define RCC_OSC_OUT_Pin GPIO_PIN_1
 #define RCC_OSC_OUT_GPIO_Port GPIOF
+#define COMP_OUT_TEST_Pin GPIO_PIN_2
+#define COMP_OUT_TEST_GPIO_Port GPIOC
+#define COMP_IN_Pin GPIO_PIN_3
+#define COMP_IN_GPIO_Port GPIOC
+#define COMP_IN_EXTI_IRQn EXTI3_IRQn
 #define T_SWDIO_Pin GPIO_PIN_13
 #define T_SWDIO_GPIO_Port GPIOA
 #define T_SWCLK_Pin GPIO_PIN_14
