@@ -99,7 +99,7 @@ void MX_DAC4_Init(void)
   sConfig.DAC_DMADoubleDataMode = DISABLE;
   sConfig.DAC_SignedFormat = DISABLE;
   sConfig.DAC_SampleAndHold = DAC_SAMPLEANDHOLD_DISABLE;
-  sConfig.DAC_Trigger = DAC_TRIGGER_T6_TRGO;
+  sConfig.DAC_Trigger = DAC_TRIGGER_EXT_IT9;
   sConfig.DAC_Trigger2 = DAC_TRIGGER_NONE;
   sConfig.DAC_OutputBuffer = DAC_OUTPUTBUFFER_DISABLE;
   sConfig.DAC_ConnectOnChipPeripheral = DAC_CHIPCONNECT_INTERNAL;
@@ -164,7 +164,7 @@ void HAL_DAC_MspInit(DAC_HandleTypeDef* dacHandle)
     hdma_dac4_ch1.Init.MemInc = DMA_MINC_ENABLE;
     hdma_dac4_ch1.Init.PeriphDataAlignment = DMA_PDATAALIGN_WORD;
     hdma_dac4_ch1.Init.MemDataAlignment = DMA_MDATAALIGN_HALFWORD;
-    hdma_dac4_ch1.Init.Mode = DMA_NORMAL;
+    hdma_dac4_ch1.Init.Mode = DMA_CIRCULAR;
     hdma_dac4_ch1.Init.Priority = DMA_PRIORITY_HIGH;
     if (HAL_DMA_Init(&hdma_dac4_ch1) != HAL_OK)
     {

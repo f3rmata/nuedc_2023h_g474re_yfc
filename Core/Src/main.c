@@ -79,7 +79,7 @@ uint16_t *generate_cosine_wave_table(uint32_t table_size, uint8_t periods,
 // #define SAMPLE_LENGTH 1024
 #define FFT_LENGTH 1024
 #define SAMPLE_RATES 1000000
-#define TABLE_LENGTH 50
+#define TABLE_LENGTH 10
 
 // q15_t cmplx_ang_out[FFT_LENGTH * 2] = {0};
 uint8_t adc_conv_finished = 0;
@@ -131,7 +131,6 @@ int main(void) {
   MX_DAC4_Init();
   MX_CORDIC_Init();
   MX_OPAMP4_Init();
-  MX_OPAMP5_Init();
   MX_TIM6_Init();
   MX_TIM7_Init();
   MX_LPUART1_UART_Init();
@@ -139,11 +138,12 @@ int main(void) {
   MX_DAC2_Init();
   MX_TIM8_Init();
   MX_COMP1_Init();
+  MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
   uint8_t str[] = "\r\n-------------USART_Sending------------------\r\n";
   HAL_UART_Transmit(&hlpuart1, str, sizeof(str) / sizeof(str[0]), 40);
   HAL_OPAMP_Start(&hopamp4);
-  HAL_OPAMP_Start(&hopamp5);
+  // HAL_OPAMP_Start(&hopamp5);
   HAL_DAC_Start(&hdac2, DAC_CHANNEL_1);
 
   // HAL_DMAEx_EnableMuxRequestGenerator(&hdma);
@@ -248,9 +248,9 @@ int main(void) {
       HAL_UART_Transmit(&hlpuart1, Trigger_UART_buf,
                         strlen((char *)Trigger_UART_buf), 40);
 
-      SET_DAC_TIM_FREQ(&htim6, TABLE_LENGTH, sec_freq + 100);
-      SET_DAC_TIM_FREQ(&htim7, TABLE_LENGTH, max_freq + 100);
-      HAL_TIM_Base_Start(&htim6);
+      SET_DAC_TIM_FREQ(&htim4, TABLE_LENGTH, sec_freq);
+      SET_DAC_TIM_FREQ(&htim7, TABLE_LENGTH, max_freq);
+      HAL_TIM_Base_Start(&htim4);
       HAL_TIM_Base_Start(&htim7);
 
       // uint8_t dactable_str_buf[50] = {0};
@@ -285,6 +285,11 @@ int main(void) {
       HAL_DAC_SetValue(&hdac2, DAC_CHANNEL_1, DAC_ALIGN_12B_L,
                        adc_val_min_q15 + 34768);
 
+      HAL_COMP_Start(&hcomp1);
+      __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_2,
+                            __HAL_TIM_GET_AUTORELOAD(&htim4) / 2);
+      HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2);
+      HAL_TIM_IC_Start_IT(&htim4, TIM_CHANNEL_1);
       adc_conv_finished = 0;
       fft_finished = 1;
     }
@@ -433,13 +438,24 @@ void SystemClock_Config(void) {
 
 /* USER CODE BEGIN 4 */
 // void HAL_COMP_TriggerCallback(COMP_HandleTypeDef *hcomp) {
-//   if (hcomp = &hcomp1) {
-//     HAL_DAC_Stop_DMA(&hdac4, DAC_CHANNEL_1);
-//     HAL_DAC_Start_DMA(&hdac4, DAC_CHANNEL_1, (uint32_t *)sintable,
-//     TABLE_LENGTH,
-//                       DAC_ALIGN_12B_R);
+//   if (hcomp == &hcomp1) {
+//     if (fft_finished) {
+//       HAL_DAC_Stop_DMA(&hdac4, DAC_CHANNEL_1);
+//       HAL_DAC_Stop_DMA(&hdac4, DAC_CHANNEL_2);
+//       HAL_DAC_Start_DMA(&hdac4, DAC_CHANNEL_1, (uint32_t *)sintable,
+//                         TABLE_LENGTH, DAC_ALIGN_12B_R);
+//       HAL_DAC_Start_DMA(&hdac4, DAC_CHANNEL_2, (uint32_t *)sintable,
+//                         TABLE_LENGTH, DAC_ALIGN_12B_R);
+//       // HAL_GPIO_TogglePin(COMP_OUT_TEST_GPIO_Port, COMP_OUT_TEST_Pin);
+//     }
 //   }
 // }
+
+void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim) {
+  if (htim == &htim4) {
+    __HAL_TIM_SetCounter(&htim4, 0); // 10kHz信号每来一个上升沿重新对齐
+  }
+}
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
   if (hadc == &hadc1) {
@@ -456,19 +472,19 @@ void HAL_DAC_ConvCpltCallbackCh1(DAC_HandleTypeDef *hdac) {
   }
 }
 
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
-  if (GPIO_Pin == GPIO_PIN_3) {
-    if (fft_finished) {
-      // HAL_DAC_Stop_DMA(&hdac4, DAC_CHANNEL_1);
-      // HAL_DAC_Stop_DMA(&hdac4, DAC_CHANNEL_2);
-      HAL_DAC_Start_DMA(&hdac4, DAC_CHANNEL_1, (uint32_t *)sintable,
-                        TABLE_LENGTH - 2, DAC_ALIGN_12B_R);
-      HAL_DAC_Start_DMA(&hdac4, DAC_CHANNEL_2, (uint32_t *)sintable,
-                        TABLE_LENGTH - 2, DAC_ALIGN_12B_R);
-      HAL_GPIO_TogglePin(COMP_OUT_TEST_GPIO_Port, COMP_OUT_TEST_Pin);
-    }
-  }
-}
+// void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
+//   if (GPIO_Pin == GPIO_PIN_3) {
+//     if (fft_finished) {
+//       // HAL_DAC_Stop_DMA(&hdac4, DAC_CHANNEL_1);
+//       // HAL_DAC_Stop_DMA(&hdac4, DAC_CHANNEL_2);
+//       HAL_DAC_Start_DMA(&hdac4, DAC_CHANNEL_1, (uint32_t *)sintable,
+//                         TABLE_LENGTH - 2, DAC_ALIGN_12B_R);
+//       HAL_DAC_Start_DMA(&hdac4, DAC_CHANNEL_2, (uint32_t *)sintable,
+//                         TABLE_LENGTH - 2, DAC_ALIGN_12B_R);
+//       HAL_GPIO_TogglePin(COMP_OUT_TEST_GPIO_Port, COMP_OUT_TEST_Pin);
+//     }
+//   }
+// }
 
 // void SET_ADC_TIM_FREQ(TIM_HandleTypeDef *htim, uint16_t wavelen,
 //                       uint32_t freq) {
