@@ -61,7 +61,8 @@ void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
 // void SET_ADC_TIM_FREQ(TIM_HandleTypeDef *htim, uint16_t wavelen, uint32_t
 // freq);
-void SET_DAC_TIM_FREQ(TIM_HandleTypeDef *htim, uint16_t wavelen, uint32_t freq);
+void SET_DAC_TIM_FREQ(TIM_HandleTypeDef *htim, uint16_t wavelen, uint32_t freq,
+                      uint16_t timclk_Mhz);
 void SET_DAC_TIM_PHASE(TIM_HandleTypeDef *htim, uint16_t wavelen,
                        float32_t phase);
 void ADD_DAC_TIM(TIM_HandleTypeDef *htim);
@@ -79,22 +80,19 @@ uint16_t *generate_cosine_wave_table(uint32_t table_size, uint8_t periods,
 // #define SAMPLE_LENGTH 1024
 #define FFT_LENGTH 1024
 #define SAMPLE_RATES 1000000
-#define TABLE_LENGTH 10
+#define TABLE_LENGTH 100
+// #define TABLE_PERIODS 5
 
 // q15_t cmplx_ang_out[FFT_LENGTH * 2] = {0};
 uint8_t adc_conv_finished = 0;
 uint8_t fft_finished = 0;
 uint8_t cal_phase_err_finished = 1;
 uint8_t start_adc = 0;
-uint16_t max_freq = 100;
-uint16_t sec_freq = 100;
 
 // DDS *stm32_dds;
-uint16_t *sintable = NULL;
-uint16_t *costable = NULL;
 
 // AD983X ad9834;
-uint8_t comp_flag = 0;
+uint8_t comp_triggered = 0;
 /* USER CODE END 0 */
 
 /**
@@ -105,6 +103,13 @@ int main(void) {
 
   /* USER CODE BEGIN 1 */
   uint16_t adc_value[FFT_LENGTH] = {0};
+  uint32_t max_freq = 100;
+  uint32_t sec_freq = 100;
+  uint16_t table_periods_dac1;
+  uint16_t table_periods_dac2;
+  uint16_t *sintable_dac1 = NULL;
+  uint16_t *sintable_dac2 = NULL;
+  uint16_t *costable = NULL;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -139,6 +144,7 @@ int main(void) {
   MX_TIM8_Init();
   MX_COMP1_Init();
   MX_TIM4_Init();
+  MX_COMP2_Init();
   /* USER CODE BEGIN 2 */
   uint8_t str[] = "\r\n-------------USART_Sending------------------\r\n";
   HAL_UART_Transmit(&hlpuart1, str, sizeof(str) / sizeof(str[0]), 40);
@@ -221,35 +227,42 @@ int main(void) {
       cmplx_mag_out[max_index] = 0;
 
       // 查找频谱的第二个峰值
-      q15_t max_second_result = 0;
-      uint32_t max_second_index = 0;
-      arm_max_q15(cmplx_mag_out, FFT_LENGTH / 2 + 1, &max_second_result,
-                  &max_second_index);
+      q15_t sec_result = 0;
+      uint32_t sec_index = 0;
+      arm_max_q15(cmplx_mag_out, FFT_LENGTH / 2 + 1, &sec_result, &sec_index);
 
       // 将频率近似到5的整数倍
       max_index = ((max_index + 2) / 5) * 5;
-      max_second_index = ((max_second_index + 2) / 5) * 5;
+      sec_index = ((sec_index + 2) / 5) * 5;
 
       max_freq = max_index * 1000;
-      sec_freq = max_second_index * 1000;
+      sec_freq = sec_index * 1000;
 
       uint8_t cmp_str_buf[50] = {0};
       sprintf((char *)cmp_str_buf, "max: %uk, sec: %uk\r\n",
-              (unsigned int)max_index, (unsigned int)max_second_index);
+              (unsigned int)max_index, (unsigned int)sec_index);
       HAL_UART_Transmit(&hlpuart1, cmp_str_buf, strlen((char *)cmp_str_buf),
                         40);
 
-      sintable = generate_sine_wave_table(TABLE_LENGTH, 1, 1024);
+      table_periods_dac1 = max_index / 10;
+      table_periods_dac2 = sec_index / 10;
+      sintable_dac1 =
+          generate_sine_wave_table(TABLE_LENGTH, table_periods_dac1, 1024);
+      sintable_dac2 =
+          generate_sine_wave_table(TABLE_LENGTH, table_periods_dac2, 1024);
       // costable = generate_cosine_wave_table(TABLE_LENGTH, 1, 1024);
 
-      uint32_t trg_freq = TABLE_LENGTH * max_freq;
+      uint32_t trg_freq = TABLE_LENGTH * sec_freq / table_periods_dac1;
       uint8_t Trigger_UART_buf[50] = {0};
       sprintf((char *)Trigger_UART_buf, "Trigger freq: %d\n", (int)trg_freq);
       HAL_UART_Transmit(&hlpuart1, Trigger_UART_buf,
                         strlen((char *)Trigger_UART_buf), 40);
 
-      SET_DAC_TIM_FREQ(&htim4, TABLE_LENGTH, sec_freq);
-      SET_DAC_TIM_FREQ(&htim7, TABLE_LENGTH, max_freq);
+      HAL_COMP_Start(&hcomp2);
+      SET_DAC_TIM_FREQ(&htim4, TABLE_LENGTH / table_periods_dac1, max_freq,
+                       160);
+      SET_DAC_TIM_FREQ(&htim7, TABLE_LENGTH / table_periods_dac2, sec_freq,
+                       160);
       HAL_TIM_Base_Start(&htim4);
       HAL_TIM_Base_Start(&htim7);
 
@@ -260,9 +273,9 @@ int main(void) {
       //                     strlen((char *)dactable_str_buf), 40);
       // }
 
-      HAL_DAC_Start_DMA(&hdac4, DAC_CHANNEL_1, (uint32_t *)sintable,
+      HAL_DAC_Start_DMA(&hdac4, DAC_CHANNEL_1, (uint32_t *)sintable_dac1,
                         TABLE_LENGTH, DAC_ALIGN_12B_R);
-      HAL_DAC_Start_DMA(&hdac4, DAC_CHANNEL_2, (uint32_t *)sintable,
+      HAL_DAC_Start_DMA(&hdac4, DAC_CHANNEL_2, (uint32_t *)sintable_dac2,
                         TABLE_LENGTH, DAC_ALIGN_12B_R);
 
       HAL_GPIO_WritePin(LED2_GPIO_PORT, LED2_PIN, GPIO_PIN_RESET);
@@ -283,13 +296,13 @@ int main(void) {
       HAL_UART_Transmit(&hlpuart1, adc_val_max_cmp_buf,
                         strlen((char *)adc_val_max_cmp_buf), HAL_MAX_DELAY);
       HAL_DAC_SetValue(&hdac2, DAC_CHANNEL_1, DAC_ALIGN_12B_L,
-                       adc_val_min_q15 + 34768);
+                       adc_val_min_q15 + 35768);
 
-      HAL_COMP_Start(&hcomp1);
-      __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_2,
-                            __HAL_TIM_GET_AUTORELOAD(&htim4) / 2);
-      HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2);
-      HAL_TIM_IC_Start_IT(&htim4, TIM_CHANNEL_1);
+      // __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_2,
+      //                       __HAL_TIM_GET_AUTORELOAD(&htim4) / 2);
+      // HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2);
+      // HAL_TIM_IC_Start_IT(&htim4, TIM_CHANNEL_1);
+      // HAL_COMP_Start(&hcomp1);
       adc_conv_finished = 0;
       fft_finished = 1;
     }
@@ -380,12 +393,28 @@ int main(void) {
           cal_phase_err_finished = 1;
          }*/
     // HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc_value, SAMPLE_TIMES);
+    if (fft_finished && comp_triggered) {
+      HAL_DAC_Stop_DMA(&hdac4, DAC_CHANNEL_1);
+      HAL_DAC_Stop_DMA(&hdac4, DAC_CHANNEL_2);
+      HAL_DAC_Start_DMA(&hdac4, DAC_CHANNEL_1, (uint32_t *)sintable_dac1,
+                        TABLE_LENGTH, DAC_ALIGN_12B_R);
+      HAL_DAC_Start_DMA(&hdac4, DAC_CHANNEL_2, (uint32_t *)sintable_dac2,
+                        TABLE_LENGTH, DAC_ALIGN_12B_R);
+
+      for (int16_t i = 0; i < 10; i++) {
+        start_adc = 0;
+        while (!start_adc)
+          ; // 等待 dac dma 完成一次传输到达零点
+      }
+      comp_triggered = 0;
+    }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
   }
   // dds_free(stm32_dds);
-  free(sintable);
+  free(sintable_dac1);
+  free(sintable_dac2);
   free(costable);
   /* USER CODE END WHILE */
 
@@ -450,12 +479,21 @@ void SystemClock_Config(void) {
 //     }
 //   }
 // }
+//
 
-void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim) {
-  if (htim == &htim4) {
-    __HAL_TIM_SetCounter(&htim4, 0); // 10kHz信号每来一个上升沿重新对齐
+void HAL_COMP_TriggerCallback(COMP_HandleTypeDef *hcomp) {
+  if (hcomp == &hcomp1) {
+    if (fft_finished && !comp_triggered) {
+      comp_triggered = 1;
+    }
   }
 }
+
+// void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim) {
+//   if (htim == &htim4) {
+//     __HAL_TIM_SetCounter(&htim4, 0); // 10kHz信号每来一个上升沿重新对齐
+//   }
+// }
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
   if (hadc == &hadc1) {
@@ -493,9 +531,9 @@ void HAL_DAC_ConvCpltCallbackCh1(DAC_HandleTypeDef *hdac) {
 //   __HAL_TIM_SET_AUTORELOAD(htim, arr);
 // }
 
-void SET_DAC_TIM_FREQ(TIM_HandleTypeDef *htim, uint16_t wavelen,
-                      uint32_t freq) {
-  uint32_t arr = 160000000 / (wavelen * freq) - 1;
+void SET_DAC_TIM_FREQ(TIM_HandleTypeDef *htim, uint16_t wavelen, uint32_t freq,
+                      uint16_t timclk_Mhz) {
+  uint32_t arr = timclk_Mhz * 1000000 / (wavelen * freq) - 1;
   __HAL_TIM_SET_AUTORELOAD(htim, arr);
 }
 

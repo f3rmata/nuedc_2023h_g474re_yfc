@@ -111,7 +111,6 @@ void MX_DAC4_Init(void)
 
   /** DAC channel OUT2 config
   */
-  sConfig.DAC_Trigger = DAC_TRIGGER_T7_TRGO;
   if (HAL_DAC_ConfigChannel(&hdac4, &sConfig, DAC_CHANNEL_2) != HAL_OK)
   {
     Error_Handler();
@@ -165,7 +164,7 @@ void HAL_DAC_MspInit(DAC_HandleTypeDef* dacHandle)
     hdma_dac4_ch1.Init.PeriphDataAlignment = DMA_PDATAALIGN_WORD;
     hdma_dac4_ch1.Init.MemDataAlignment = DMA_MDATAALIGN_HALFWORD;
     hdma_dac4_ch1.Init.Mode = DMA_CIRCULAR;
-    hdma_dac4_ch1.Init.Priority = DMA_PRIORITY_HIGH;
+    hdma_dac4_ch1.Init.Priority = DMA_PRIORITY_VERY_HIGH;
     if (HAL_DMA_Init(&hdma_dac4_ch1) != HAL_OK)
     {
       Error_Handler();
@@ -182,7 +181,7 @@ void HAL_DAC_MspInit(DAC_HandleTypeDef* dacHandle)
     hdma_dac4_ch2.Init.PeriphDataAlignment = DMA_PDATAALIGN_WORD;
     hdma_dac4_ch2.Init.MemDataAlignment = DMA_MDATAALIGN_HALFWORD;
     hdma_dac4_ch2.Init.Mode = DMA_CIRCULAR;
-    hdma_dac4_ch2.Init.Priority = DMA_PRIORITY_HIGH;
+    hdma_dac4_ch2.Init.Priority = DMA_PRIORITY_VERY_HIGH;
     if (HAL_DMA_Init(&hdma_dac4_ch2) != HAL_OK)
     {
       Error_Handler();
